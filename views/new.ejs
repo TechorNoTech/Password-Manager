@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New/Edit DataInfo</title>
+    <link rel ="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+    <div class = "container">
+        <% if (locals.dataInfo) { %>
+            <form id="edit" action = "/dashboard/posts + id" method = "post">
+                <div>
+                    <label for="email">Name of Website:</label>
+                    <input type="text" id="website" name="website" placeholder="Enter the name of website">
+                </div>
+                <div>
+                    <label for="username">Username/Email:</label>
+                    <input type="text" id="username" name="username" placeholder="Enter your username">
+                </div>
+                <div>
+                    <label for="password">Password:</label>
+                    <input type="text" id="password" name="password" placeholder="Enter your password">
+                </div>
+                <input class="button" type= "submit" value="create">
+            </form>
+        <%} else { %>
+            <form id="newData" action = "/dashboard/posts" method = "post">
+                <div>
+                    <label for="email">Name of Website:</label>
+                    <input type="text" id="website" name="website" placeholder="Enter the name of website">
+                </div>
+                <div>
+                    <label for="username">Username/Email:</label>
+                    <input type="text" id="username" name="username" placeholder="Enter your username">
+                </div>
+                <div>
+                    <label for="password">Password:</label>
+                    <input type="text" id="password" name="password" placeholder="Enter your password">
+                </div>
+                <input class="button" type= "submit" value="create">
+            </form>
+        <%} %>
+    </div>
+</body>
+</html>
