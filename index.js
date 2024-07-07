@@ -7,6 +7,7 @@ import passport from "passport";
 import { Strategy } from "passport-local";
 import GoogleStrategy from "passport-google-oauth2";
 import env from "dotenv";
+import methodOverride from "method-override";
 // import {dirname} from "path";
 // import { fileURLToPath } from "url";
 // const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,7 @@ app.set('view engine', 'ejs');
 app.set('views', './views');
 
 app.use(express.static("public"));
+app.use(methodOverride('_method'));
 // app.use(express.static(__dirname + '/public'));
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
@@ -120,26 +122,6 @@ app.get("/contact", (req, res)=> {
 });
 
 
-
-
-
-// let currentUserId = 3;
-// let users = [{}];
-app.post("/dashboard", (req, res)=> {
-    // const websiteName = req.body.website;
-    // const username = req.body.username;
-    // const password = req.body.password;
-    // console.log(websiteName);
-    // console.log(username);
-    // console.log(password);
-    
-    // res.render("dashboard", {username: username,
-    //     websiteName: websiteName,
-    //     password: password,
-    //  });
-
-})
-
 app.get("/dashboard", async (req, res)=> {
     
     // console.log(req.user);
@@ -154,12 +136,13 @@ app.get("/dashboard", async (req, res)=> {
 
             async function checkInfo() {
             const result = await db.query(
-                "SELECT website, website_username, website_password FROM saved_credentials JOIN users ON users.id = user_id WHERE user_id = $1;",
+                "SELECT saved_credentials.id, website, website_username, website_password FROM saved_credentials JOIN users ON users.id = user_id WHERE user_id = $1;",
                 [currentUserId] 
             );
             let userData = [];
             result.rows.forEach((user)=>{ 
                 userData.push({
+                    website_id: user.id,
                     website: user.website,
                     website_username: user.website_username,
                     website_password: user.website_password,
@@ -184,9 +167,80 @@ app.get("/dashboard", async (req, res)=> {
     }
 });
 
-app.post("/new", async (req, res)=> {
-
+app.get("/new", async (req, res)=> {
+    if (req.isAuthenticated()) {
+        res.render("modify.ejs", {
+            heading: "New Entry", submit: "Create Entry"
+        });
+    } else {
+    res.redirect("/login");
+    }
 });
+
+// Create new post, send data to postgres & return to dashboard
+app.post("/new", async (req, res) => {
+    if (req.isAuthenticated()) {
+        try {
+            const result = await db.query(
+            "INSERT INTO saved_credentials (website, website_username, website_password, user_id) VALUES ($1, $2, $3, $4)",
+            [req.body.website, req.body.username, req.body.password, req.user.id]);
+            res.redirect("/dashboard");
+        } catch (error) {
+            res.status(500).json({ message: "Error creating post" });
+         }
+    } else {
+     res.redirect("/login");
+    }
+  });
+
+// Route to showcase the existing entry you want to update
+app.get("/edit/:id", async (req, res) => {
+    const { id } = req.params; 
+    try {
+        const result = await db.query(
+            "SELECT * FROM  saved_credentials WHERE id = $1",[id]);
+        const credential = result.rows[0];
+        // console.log(credential);
+
+        if (credential) { 
+            res.render("modify.ejs", { credential, heading: "Edit Entry", submit:"Update Entry"});
+        } else {
+            res.status(404).send("Credential not found!");
+        }
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error editing post" });
+    }
+});
+
+// Updates patched info to database
+app.post("/edit/:id", async (req, res)=> {
+    const {id} = req.params;
+    const { website, username, password } = req.body;
+    try {
+            const result = await db.query(
+            "UPDATE saved_credentials SET website= $1, website_username= $2, website_password= $3 WHERE id= $4",
+            [website, username, password, id]);
+            res.redirect("/dashboard");
+        }
+    catch (error) {
+        res.status(500).json({ message: "Error updating credential, server error" });
+    }
+});
+
+// Deleting entries
+app.delete("/delete/:id", async (req, res) => {
+    const {id} = req.params;
+    try {
+        await db.query("DELETE FROM saved_credentials WHERE id=$1", [id]);
+        // res.status(200).json({message: "Entry deleted successfully"});
+        res.redirect("/dashboard");
+    }
+    catch (error) {
+        console.error("Error deleting entry", error);
+        res.status(500).json({ message: "Error deleting entry, server error"});
+        }
+    });
 
 app.get("/auth/google", passport.authenticate("google", { 
     scope: ["profile", "email",]

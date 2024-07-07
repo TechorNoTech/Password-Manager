@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New/Edit DataInfo</title>
+    <link rel ="stylesheet" href="/css/styles.css">
+
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            background-color: #fff;
+            padding: 20px 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <div class = "container">
+        <h1><%= heading %> </h1>
+        <% if (locals.credential) { %>
+            <form id="edit" action = "/edit/<%= credential.id %>" method = "post">
+                <div>
+                    <label for="website"></label>
+                    <input type="text" id="website" name="website" value="<%= credential.website%>" placeholder="Enter the name of website">
+                </div>
+                <div>
+                    <label for="username"></label>
+                    <input type="text" id="username" name="username" value="<%= credential.website_username %>" placeholder="Enter your username">
+                </div>
+                <div>
+                    <label for="password"></label>
+                    <input type="text" id="password" name="password" value="<%= credential.website_password%>" placeholder="Enter your password">
+                </div>
+                <button class="full-width" type= "submit" ><%= submit %> </button>
+            </form>
+        <%} else { %>
+            <form id="newData" action = "/new" method = "post">
+                <div>
+                    <label for="username"></label>
+                    <input type="text" id="website" name="website" placeholder="Enter the name of website">
+                </div>
+                <div>
+                    <label for="username"></label>
+                    <input type="text" id="username" name="username" placeholder="Enter your username">
+                </div>
+                <div>
+                    <label for="password"></label>
+                    <input type="text" id="password" name="password" placeholder="Enter your password">
+                </div>
+                <button class="full-width" type= "submit" ><%= submit %> </button>
+            </form>
+        <%} %>
+    </div>
+</body>
+</html>

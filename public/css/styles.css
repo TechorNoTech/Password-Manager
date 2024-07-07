@@ -1,5 +1,13 @@
 .container {
     flex: 1;
+    
+      /* max-width: 800px;
+      margin: 50px auto;
+      background-color: #fff;
+      padding: 20px 40px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); */
+    
 }
 
 #bootstrap-overrides {
@@ -117,3 +125,19 @@
     opacity: 8%;
   }
   
+  button.full-width {
+    display: block;
+    text-align: center;
+    width: 100%;
+  }
+
+  input
+ {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1em;
+  outline: none;
+  transition: border 0.3s;
+}
