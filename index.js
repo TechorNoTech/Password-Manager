@@ -8,6 +8,7 @@ import { Strategy } from "passport-local";
 import GoogleStrategy from "passport-google-oauth2";
 import env from "dotenv";
 import methodOverride from "method-override";
+import crypto from "crypto";
 // import {dirname} from "path";
 // import { fileURLToPath } from "url";
 // const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -121,6 +122,92 @@ app.get("/contact", (req, res)=> {
     res.render("contact.ejs");
 });
 
+// Crypto function
+// const crypto = require("crypto");
+
+
+const encryptPassword = (key, text)=> { 
+    // random initialization vector
+    const iv = crypto.randomBytes(12).toString('base64');
+
+    //creating cipher object
+    const cipher = crypto.createCipheriv("aes-256-gcm", Buffer.from(key, 'base64'), Buffer.from(iv, 'base64'));
+
+    // push text into ciphertext for encryption
+    let ciphertext = cipher.update(text, 'utf8', 'base64');
+
+    // final encrypted
+    ciphertext += cipher.final('base64');
+
+    //authentication tag for encryption
+    const tag = cipher.getAuthTag().toString('base64');
+    return {ciphertext, iv, tag};
+}
+const key = crypto.randomBytes(32).toString('base64');
+console.log(key);
+
+
+
+// Create new post, send data to postgres & return to dashboard
+app.post("/new", async (req, res) => {
+    if (req.isAuthenticated()) {
+        try {
+            const newPassword = req.body.password;
+            const {ciphertext, iv , tag } = encryptPassword(key, newPassword);
+            
+            // console.log(`Ciphertext: ${ciphertext}`);
+            // console.log(`IV: ${iv}`);
+            // console.log(`Tag: ${tag}`);
+
+            const result1= await db.query(
+            "INSERT INTO saved_credentials (website, website_username, website_password, user_id) VALUES ($1, $2, $3, $4)",
+            [req.body.website, req.body.username, ciphertext, req.user.id]);
+
+            // console.log(result1);
+            
+            // Get saved_credentials.id 
+            const resultId = await db.query(
+                "SELECT saved_credentials.id FROM saved_credentials ORDER BY id DESC LIMIT 1"
+            );
+            console.log(resultId.rows[0]);
+
+            const newNum = resultId.rows[0].id;
+
+            const result2= await db.query(
+                "INSERT INTO passes (iv, tag, pass_id) VALUES ($1, $2, $3)",
+                [iv, tag, newNum]); // saved_credentials.id
+            res.redirect("/dashboard");
+
+            // console.log(result2);
+        } catch (error) {
+            res.status(500).json({ message: "Error creating post" });
+         }
+    } else {
+     res.redirect("/login");
+    }
+  });
+
+//Decryption helper function
+
+const decryptPassword = (key, ciphertext, iv, tag) => {
+    //create a cipher object
+    const decipher = crypto.createDecipheriv(
+        "aes-256-gcm", Buffer.from(key, 'base64'),
+        Buffer.from(iv, 'base64')
+    );
+
+    // set auth tag for decipher object
+    decipher.setAuthTag(Buffer.from(tag, 'base64'));
+
+    //update decipher object with base64-encoded ciphertext
+    let plaintext = decipher.update(ciphertext, 'base64', 'utf8');
+
+    //final encrypted
+    plaintext += decipher.final('utf8');
+    
+    return plaintext;
+}
+
 
 app.get("/dashboard", async (req, res)=> {
     
@@ -148,8 +235,46 @@ app.get("/dashboard", async (req, res)=> {
                     website_password: user.website_password,
                 });
             });
+
+            // Gather tag, iv, ciphertext from saved_credentials and passes
+            // const result2 = await db.query(
+            //     "SELECT passes.id, iv, tag, pass_id FROM passes JOIN saved_credentials ON pass_id = saved_credentials.id WHERE user_id = $1",
+            //     [currentUserId]
+            // );
+
+            // create object, pushing passwords as array
+            // const allPasswords = result1.rows.map(user => {
+            //     const passDetails = result2.rows.find(pass => pass.pass_id === user.id);
+            //     return {
+            //         website_password: user.website_password,
+            //         iv: passDetails ? passDetails.iv: null,
+            //         tag: passDetails ? passDetails.tag: null,
+            //     };
+            // });
+
+    
+
+            //decipher passwords
+            // const decryptedPasswords= allPasswords.map(details => 
+            //     decryptPassword(key, details.website_password, details.iv ,details.tag));
+               
+
+            // //push to userdata
+            
+            // result1.rows.forEach((user, index)=>{ 
+            //     userData.push({
+            //         website_id: user.id,
+            //         website: user.website,
+            //         website_username: user.website_username,
+            //         website_password: decryptedPasswords[index],
+                    
+            //     });
+            // });
+
+            //create new const/let password = sth, decrypt then show password.
             return userData;
             }
+
 
             const currentUser = await getCurrentUser();
             const dataInfo = await checkInfo();
@@ -177,21 +302,7 @@ app.get("/new", async (req, res)=> {
     }
 });
 
-// Create new post, send data to postgres & return to dashboard
-app.post("/new", async (req, res) => {
-    if (req.isAuthenticated()) {
-        try {
-            const result = await db.query(
-            "INSERT INTO saved_credentials (website, website_username, website_password, user_id) VALUES ($1, $2, $3, $4)",
-            [req.body.website, req.body.username, req.body.password, req.user.id]);
-            res.redirect("/dashboard");
-        } catch (error) {
-            res.status(500).json({ message: "Error creating post" });
-         }
-    } else {
-     res.redirect("/login");
-    }
-  });
+
 
 // Route to showcase the existing entry you want to update
 app.get("/edit/:id", async (req, res) => {
@@ -221,6 +332,7 @@ app.post("/edit/:id", async (req, res)=> {
             const result = await db.query(
             "UPDATE saved_credentials SET website= $1, website_username= $2, website_password= $3 WHERE id= $4",
             [website, username, password, id]);
+            //Encrypt password again before sending to database. maybe separate Db query for password.
             res.redirect("/dashboard");
         }
     catch (error) {
@@ -316,6 +428,7 @@ passport.deserializeUser((user, cb) => {
     cb(null, user);
 });
 
+// listening on server, change to ENV const so no one knows which port it is listening on
 app.listen(3000, () => {
     console.log("Server running on port 3000");
 });
