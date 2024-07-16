@@ -143,10 +143,7 @@ const encryptPassword = (key, text)=> {
     const tag = cipher.getAuthTag().toString('base64');
     return {ciphertext, iv, tag};
 }
-const key = crypto.randomBytes(32).toString('base64');
-console.log(key);
-
-
+const key = process.env.KEY_ENCRYPT;
 
 // Create new post, send data to postgres & return to dashboard
 app.post("/new", async (req, res) => {
@@ -154,7 +151,6 @@ app.post("/new", async (req, res) => {
         try {
             const newPassword = req.body.password;
             const {ciphertext, iv , tag } = encryptPassword(key, newPassword);
-            
             // console.log(`Ciphertext: ${ciphertext}`);
             // console.log(`IV: ${iv}`);
             // console.log(`Tag: ${tag}`);
@@ -222,59 +218,32 @@ app.get("/dashboard", async (req, res)=> {
             }
 
             async function checkInfo() {
-            const result = await db.query(
-                "SELECT saved_credentials.id, website, website_username, website_password FROM saved_credentials JOIN users ON users.id = user_id WHERE user_id = $1;",
-                [currentUserId] 
-            );
+           
+            
             let userData = [];
-            result.rows.forEach((user)=>{ 
+
+            const result1 = await db.query(
+                "SELECT saved_credentials.id, website, website_username, website_password, iv, tag FROM saved_credentials JOIN users ON users.id = user_id JOIN passes ON saved_credentials.id = pass_id WHERE user_id = $1",
+                 [currentUserId]);
+
+            // console.log(result1.rows);
+            result1.rows.forEach((user)=> {
+                // console.log(user.website_password);
+                const decryptedPasses = [];
+                const decryptedPassword = decryptPassword(key, user.website_password, user.iv, user.tag);
+                decryptedPasses.push(decryptedPassword);
+                // console.log(decryptedPasses) ;
+
                 userData.push({
                     website_id: user.id,
                     website: user.website,
                     website_username: user.website_username,
-                    website_password: user.website_password,
+                    website_password: decryptedPasses,
                 });
+                // console.log(userData);
             });
-
-            // Gather tag, iv, ciphertext from saved_credentials and passes
-            // const result2 = await db.query(
-            //     "SELECT passes.id, iv, tag, pass_id FROM passes JOIN saved_credentials ON pass_id = saved_credentials.id WHERE user_id = $1",
-            //     [currentUserId]
-            // );
-
-            // create object, pushing passwords as array
-            // const allPasswords = result1.rows.map(user => {
-            //     const passDetails = result2.rows.find(pass => pass.pass_id === user.id);
-            //     return {
-            //         website_password: user.website_password,
-            //         iv: passDetails ? passDetails.iv: null,
-            //         tag: passDetails ? passDetails.tag: null,
-            //     };
-            // });
-
-    
-
-            //decipher passwords
-            // const decryptedPasswords= allPasswords.map(details => 
-            //     decryptPassword(key, details.website_password, details.iv ,details.tag));
-               
-
-            // //push to userdata
-            
-            // result1.rows.forEach((user, index)=>{ 
-            //     userData.push({
-            //         website_id: user.id,
-            //         website: user.website,
-            //         website_username: user.website_username,
-            //         website_password: decryptedPasswords[index],
-                    
-            //     });
-            // });
-
-            //create new const/let password = sth, decrypt then show password.
             return userData;
             }
-
 
             const currentUser = await getCurrentUser();
             const dataInfo = await checkInfo();
@@ -344,11 +313,20 @@ app.post("/edit/:id", async (req, res)=> {
 app.delete("/delete/:id", async (req, res) => {
     const {id} = req.params;
     try {
-        await db.query("DELETE FROM saved_credentials WHERE id=$1", [id]);
+        //transaction
+        await db.query("BEGIN");
+
+
+        await db.query("DELETE FROM passes WHERE pass_id = $1", [id]);
+        await db.query("DELETE FROM saved_credentials WHERE id = $1", [id]);
+
+        await db.query("COMMIT");
         // res.status(200).json({message: "Entry deleted successfully"});
         res.redirect("/dashboard");
     }
     catch (error) {
+        //Rollback in case of error
+        await db.query("ROLLBACK");
         console.error("Error deleting entry", error);
         res.status(500).json({ message: "Error deleting entry, server error"});
         }
