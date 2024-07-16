@@ -276,38 +276,67 @@ app.get("/new", async (req, res)=> {
 // Route to showcase the existing entry you want to update
 app.get("/edit/:id", async (req, res) => {
     const { id } = req.params; 
-    try {
-        const result = await db.query(
-            "SELECT * FROM  saved_credentials WHERE id = $1",[id]);
-        const credential = result.rows[0];
-        // console.log(credential);
-
-        if (credential) { 
-            res.render("modify.ejs", { credential, heading: "Edit Entry", submit:"Update Entry"});
-        } else {
+    if (req.isAuthenticated()){
+       
+        try {
+            const result = await db.query(
+            "SELECT website, website_username, website_password, iv, tag FROM saved_credentials JOIN passes ON saved_credentials.id = pass_id WHERE saved_credentials.id = $1",
+                 [id]);
+             const credential = result.rows[0];
+            //  console.log(credential);
+            
+            const decryptedPassword = decryptPassword(key, credential.website_password, credential.iv, credential.tag);
+            // decryptedPasses.push(decryptedPassword);
+            // console.log(decryptedPasses) ;
+    
+            if (credential) { 
+            res.render("modify.ejs", { credential, decryptedPassword, heading: "Edit Entry", submit:"Update Entry"});
+            } else {
             res.status(404).send("Credential not found!");
+            }
         }
-    }
-    catch (error) {
-        res.status(500).json({ message: "Error editing post" });
-    }
-});
+        catch (error) {
+             res.status(500).json({ message: "Error editing post" });
+        }
+}});
 
 // Updates patched info to database
 app.post("/edit/:id", async (req, res)=> {
     const {id} = req.params;
     const { website, username, password } = req.body;
-    try {
+    if (req.isAuthenticated()){
+        try {
+            
+            const newPassword = req.body.password;
+            const {ciphertext, iv , tag } = encryptPassword(key, newPassword);
+            // console.log(`Ciphertext: ${ciphertext}`);
+            // console.log(`IV: ${iv}`);
+            // console.log(`Tag: ${tag}`);
+            
+            //Transaction
+            await db.query("BEGIN");
+
             const result = await db.query(
             "UPDATE saved_credentials SET website= $1, website_username= $2, website_password= $3 WHERE id= $4",
-            [website, username, password, id]);
+            [website, username, ciphertext, id]);
+
+            const result1 = await db.query(
+                "UPDATE passes SET iv= $1, tag = $2 WHERE pass_id = $3",
+            [iv, tag, id]);
+
+            //Commit Transaction
+            await db.query("COMMIT");
             //Encrypt password again before sending to database. maybe separate Db query for password.
+            
+
             res.redirect("/dashboard");
         }
-    catch (error) {
-        res.status(500).json({ message: "Error updating credential, server error" });
+        catch (error) {
+            //Rollback in case of an error 
+            await db.query("ROLLBACK");
+            res.status(500).json({ message: "Error updating credential, server error" });
     }
-});
+}});
 
 // Deleting entries
 app.delete("/delete/:id", async (req, res) => {
@@ -406,7 +435,8 @@ passport.deserializeUser((user, cb) => {
     cb(null, user);
 });
 
+
 // listening on server, change to ENV const so no one knows which port it is listening on
-app.listen(3000, () => {
-    console.log("Server running on port 3000");
+app.listen(process.env.LISTEN, () => {
+    console.log("Server running on port LISTEN");
 });
